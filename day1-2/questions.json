@@ -1,0 +1,4 @@
+[
+  "Sort the given array of numbers in ascending order in python array format code only. \nFor Example, if input: `[694, 538, 768, 153, 852]`\nThen the output is `[153, 538, 694, 768, 852]`.",
+  "Sort the given array of numbers in ascending order in python array format code only. \nFor Example, if input: `[-694, 538, 768, -153, 852]`\nThen the output is `[-694, -153, 538, 768, 852]`."
+]
