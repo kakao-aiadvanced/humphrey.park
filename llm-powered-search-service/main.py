@@ -38,8 +38,8 @@ docs = loader.load()
 combined_docs = "\n".join(doc.page_content for doc in docs)
 
 text_splitter = RecursiveCharacterTextSplitter(
-    chunk_size=250,
-    chunk_overlap=50,
+    chunk_size=500,
+    chunk_overlap=100,
     length_function=len,
     is_separator_regex=False,
 )
@@ -88,34 +88,58 @@ llm = ChatOllama(model="llama3:8b", temperature=0)
 
 class RelevanceResults(BaseModel):
     relevance: str = Field(
-        description="Whether the retrieved document is relevant to the query. If relevant, set to 'yes'; otherwise, set to 'no'.")
+        description="Whether the document is relevant to the sentence. If relevant, set to 'yes'; otherwise, set to 'no'.")
 
-# Set up a parser + inject instructions into the prompt template.
-parser = JsonOutputParser(pydantic_object=RelevanceResults)
 
-prompt = PromptTemplate(
-    template="You are an assistant that provides answers in JSON format.\n{format_instructions}\n\nQuery: \"{query}\"\nRetrieved document: \"{docs}\"\n\nJSON Response:",
+relevance_result_parser = JsonOutputParser(pydantic_object=RelevanceResults)
+
+relevance_inquiry_prompt = PromptTemplate(
+    template=
+    "Your task is to determine the similarity between the document and the sentence. \n"
+    "Consider both semantic meaning and contextual relevance in your evaluation.\n\n"
+    "You are an assistant that provides answers in JSON format.\n"
+    "{format_instructions}\n\n"
+    "### sentence: \n"
+    "---\n"
+    "{query}\n"
+    "---\n\n"
+    "### document: \n"
+    "---\n"
+    "{docs}\n"
+    "---\n\n"
+    "### Instructions:\n"
+    "1. Analyze the content of the document and the sentence.\n"
+    "2. Determine the semantic similarity and contextual relevance between the document and the sentence.\n"
+    "3. Answer \"yes\" if the sentence is meaningfully related to the document, otherwise answer \"no\".\n"
+    "\n\nJSON Response:",
 
     input_variables=["query", 'docs'],
-    partial_variables={"format_instructions": parser.get_format_instructions()},
+    partial_variables={"format_instructions": relevance_result_parser.get_format_instructions()},
 )
 
-chain = prompt | llm | parser
+relevance_check_chain = relevance_inquiry_prompt | llm | relevance_result_parser
 
 # 6. 5 에서 모든 docs에 대해 ‘no’ 라면 디버깅
 # (Splitter, Chunk size, overlap, embedding model, vector store, retrieval 평가 시스템 프롬프트 등)
-query_results = [chain.invoke({"query": query, "docs": result.page_content}) for result in results_from_vectorstore]
+query_results = [relevance_check_chain.invoke({"query": query, "docs": result.page_content}) for result in
+                 results_from_vectorstore]
 print(query_results)
 assert all(result["relevance"] == "yes" for result in query_results)
 
 # 7. 5에서 ‘yes’ 라면 질문과 명확히 관련 없는 docs 나 질문 (예: ‘I like an apple’)에 대해서는 ‘no’ 라고 나오는지 테스트 프롬프트 및 평가 코드 작성.
 # 이 때는 관련 없다는 답변 작성
 # - llama3 prompt format 준수
-invalid_query = "I like an apple"
+invalid_query = "I like an apple."
 invalid_results_from_vectorstore = vectorstore.similarity_search(invalid_query, 5)
-invalid_query_results = [chain.invoke({"query": invalid_query, "docs": result.page_content}) for result in invalid_results_from_vectorstore]
+
+# for result in invalid_results_from_vectorstore:
+#     print(result.page_content + '\n------\n')
+
+invalid_query_results = [relevance_check_chain.invoke({"query": invalid_query, "docs": result.page_content}) for result
+                         in invalid_results_from_vectorstore]
 print(invalid_query_results)
 assert all(result["relevance"] == "no" for result in invalid_query_results)
+
 
 # 8. ‘yes’ 이고 7의 평가에서도 문제가 없다면, 4의 retrieved chunk 를 가지고 답변 작성
 # prompt | llm | parser 형태로 작성
@@ -127,30 +151,50 @@ assert all(result["relevance"] == "no" for result in invalid_query_results)
 # 라고 출력하도록 함
 # - llama3 prompt format 준수
 class HallucinationResults(BaseModel):
-    query: str = Field(
-        description="Given query.")
-    docs: str = Field(
-        description="Given document.")
-    relevance: str = Field(
-        description="Whether the retrieved document is relevant to the query. If relevant, set to 'yes'; otherwise, set to 'no'.")
     hallucination: str = Field(
-        description="Given query, retrived document and the relevance, check. If it has hallucination, set to 'yes'; otherwise, set to 'no'.")
+        description="Whether the document is relevant to the sentence. If relevant, set to 'yes'; otherwise, set to 'no'.")
 
-# Set up a parser + inject instructions into the prompt template.
-parser = JsonOutputParser(pydantic_object=HallucinationResults)
+
+hallucination_json_parser = JsonOutputParser(pydantic_object=HallucinationResults)
 
 hallucination_check_prompt = PromptTemplate(
-    template="You are an assistant that provides answers in JSON format.\n{format_instructions}\n\nQuery: \"{query}\"\nRetrieved document: \"{docs}\"\n\nJSON Response:",
-    input_variables=["query", 'docs'],
-    partial_variables={"format_instructions": parser.get_format_instructions()},
+    template=
+    "You are given a response that evaluates the similarity between a document and a sentence. \n"
+    "Your task is to determine whether the explanation provided contains any hallucinations. \n"
+    "A hallucination occurs when the response is 'yes' even if the sentence cannot be inferred from the document.\n"
+    "You are an assistant that provides answers in JSON format.\n"
+    "{format_instructions}\n\n"
+    "### sentence: \n"
+    "---\n"
+    "{query}\n"
+    "---\n\n"
+    "### document: \n"
+    "---\n"
+    "{docs}\n"
+    "---\n\n"
+    "### response: \n"
+    "---\n"
+    "Answer: {relevance}\n"
+    "---\n\n"
+    "### Instructions:\n"
+    "1. Analyze the content of the document, the sentence, and the explanation.\n"
+    '2. Answer "yes" if there are hallucinations, otherwise answer "no".\n'
+    "\n\nJSON Response:",
+    input_variables=["query", 'docs', 'relevance'],
+    partial_variables={"format_instructions": hallucination_json_parser.get_format_instructions()},
 )
 
-# 10. 9 에서 ‘yes’ 면 8 로 돌아가서 다시 생성, ‘no’ 면 답변 생성하고 유저에게 답변 생성에 사용된 출처와 함께 출력
-hallucination_check_chain = hallucination_check_prompt | llm | parser
-hallucination_check_results = [hallucination_check_chain.invoke({"query": invalid_query, "docs": result.page_content}) for result in invalid_results_from_vectorstore]
+invalid_results_with_relevance_results = list(zip(invalid_results_from_vectorstore, invalid_query_results))
 
+# 10. 9 에서 ‘yes’ 면 8 로 돌아가서 다시 생성, ‘no’ 면 답변 생성하고 유저에게 답변 생성에 사용된 출처와 함께 출력
+hallucination_check_chain = hallucination_check_prompt | llm | hallucination_json_parser
+hallucination_check_results = [hallucination_check_chain.invoke(
+    {"query": invalid_query, "docs": result[0].page_content, "relevance": result[1]["relevance"]}) for result in
+    invalid_results_with_relevance_results]
+
+print(hallucination_check_results)
 assert all(result["hallucination"] == "no" for result in hallucination_check_results)
 
-for result in hallucination_check_results:
-    print(f'Query: {result["query"]}')
-    print(f'Relevance results: {result["docs"]}')
+for result in invalid_results_with_relevance_results:
+    print(f'Query: {invalid_query}')
+    print(f'Relevance results: \n----\n{result[0].page_content}\n----\n')
