@@ -1,18 +1,16 @@
-from typing import List
-from langchain_core.output_parsers import JsonOutputParser
-from langchain_text_splitters import RecursiveCharacterTextSplitter
+import bs4
+import faiss
+from dotenv import load_dotenv
+from langchain.schema.document import Document
 from langchain_community.chat_models import ChatOllama
+from langchain_community.docstore.in_memory import InMemoryDocstore
 from langchain_community.document_loaders import WebBaseLoader
-from langchain_openai import OpenAIEmbeddings
+from langchain_community.vectorstores import FAISS
+from langchain_core.output_parsers import JsonOutputParser
 from langchain_core.prompts import PromptTemplate
 from langchain_core.pydantic_v1 import BaseModel, Field
-from langchain_community.vectorstores import FAISS
-from langchain_community.docstore.in_memory import InMemoryDocstore
-from langchain.schema.document import Document
-import bs4
-from dotenv import load_dotenv
-import os
-import faiss
+from langchain_openai import OpenAIEmbeddings
+from langchain_text_splitters import RecursiveCharacterTextSplitter
 
 # load .env
 load_dotenv()
@@ -69,7 +67,8 @@ documents = [Document(page_content=text) for text in texts_content]
 docstore = InMemoryDocstore(dict(enumerate(documents)))
 index_to_docstore_id = {i: i for i in range(len(documents))}
 
-vectorstore = FAISS(index=index, docstore=docstore, index_to_docstore_id=index_to_docstore_id, embedding_function=embeddings)
+vectorstore = FAISS(index=index, docstore=docstore, index_to_docstore_id=index_to_docstore_id,
+                    embedding_function=embeddings)
 
 # 임베딩을 FAISS 인덱스에 추가
 vectorstore.add_texts(texts_content)
@@ -87,8 +86,10 @@ results = vectorstore.similarity_search(query, 5)
 # https://python.langchain.com/v0.2/docs/how_to/output_parser_json/#without-pydantic
 llm = ChatOllama(model="llama3:8b", temperature=0)
 
+
 class RelevanceResults(BaseModel):
-    relevance: str = Field(description="Whether the retrieved document is relevant to the query. If relevant, set to 'yes'; otherwise, set to 'no'.")
+    relevance: str = Field(
+        description="Whether the retrieved document is relevant to the query. If relevant, set to 'yes'; otherwise, set to 'no'.")
 
 # Set up a parser + inject instructions into the prompt template.
 parser = JsonOutputParser(pydantic_object=RelevanceResults)
