@@ -95,20 +95,17 @@ class RelevanceResults(BaseModel):
 parser = JsonOutputParser(pydantic_object=RelevanceResults)
 
 prompt = PromptTemplate(
-    template="Answer the user query.\n{format_instructions}\n{query}\n",
+    template="You are an assistant that provides answers in JSON format.\n{format_instructions}\nQuery: {query}\n\nJSON Response:",
     input_variables=["query"],
     partial_variables={"format_instructions": parser.get_format_instructions()},
 )
 
-chain = prompt | llm #| parser
-print(result)
-print(chain.invoke({"query": results[0].page_content}))
+chain = prompt | llm | parser
 
 # 6. 5 에서 모든 docs에 대해 ‘no’ 라면 디버깅
 # (Splitter, Chunk size, overlap, embedding model, vector store, retrieval 평가 시스템 프롬프트 등)
-# chain_results = [chain.invoke({"query": result.page_content}) for result in results]
-
-# print(chain_results)
+chain_results = [chain.invoke({"query": result.page_content}) for result in results]
+print(chain_results)
 
 # 7. 5에서 ‘yes’ 라면 질문과 명확히 관련 없는 docs 나 질문 (예: ‘I like an apple’)에 대해서는 ‘no’ 라고 나오는지 테스트 프롬프트 및 평가 코드 작성.
 # 이 때는 관련 없다는 답변 작성
