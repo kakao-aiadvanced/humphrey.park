@@ -38,9 +38,8 @@ docs = loader.load()
 combined_docs = "\n".join(doc.page_content for doc in docs)
 
 text_splitter = RecursiveCharacterTextSplitter(
-    # Set a really small chunk size, just to show.
-    chunk_size=100,
-    chunk_overlap=20,
+    chunk_size=250,
+    chunk_overlap=50,
     length_function=len,
     is_separator_regex=False,
 )
@@ -95,7 +94,8 @@ class RelevanceResults(BaseModel):
 parser = JsonOutputParser(pydantic_object=RelevanceResults)
 
 prompt = PromptTemplate(
-    template="You are an assistant that provides answers in JSON format.\n{format_instructions}\n\nQuery: \"{query}\"\n```\n\nRetrieved document: \"{docs}\"\n\nJSON Response:",
+    template="You are an assistant that provides answers in JSON format.\n{format_instructions}\n\nQuery: \"{query}\"\nRetrieved document: \"{docs}\"\n\nJSON Response:",
+
     input_variables=["query", 'docs'],
     partial_variables={"format_instructions": parser.get_format_instructions()},
 )
@@ -105,6 +105,7 @@ chain = prompt | llm | parser
 # 6. 5 에서 모든 docs에 대해 ‘no’ 라면 디버깅
 # (Splitter, Chunk size, overlap, embedding model, vector store, retrieval 평가 시스템 프롬프트 등)
 query_results = [chain.invoke({"query": query, "docs": result.page_content}) for result in results_from_vectorstore]
+print(query_results)
 assert all(result["relevance"] == "yes" for result in query_results)
 
 # 7. 5에서 ‘yes’ 라면 질문과 명확히 관련 없는 docs 나 질문 (예: ‘I like an apple’)에 대해서는 ‘no’ 라고 나오는지 테스트 프롬프트 및 평가 코드 작성.
@@ -113,6 +114,7 @@ assert all(result["relevance"] == "yes" for result in query_results)
 invalid_query = "I like an apple"
 invalid_results_from_vectorstore = vectorstore.similarity_search(invalid_query, 5)
 invalid_query_results = [chain.invoke({"query": invalid_query, "docs": result.page_content}) for result in invalid_results_from_vectorstore]
+print(invalid_query_results)
 assert all(result["relevance"] == "no" for result in invalid_query_results)
 
 # 8. ‘yes’ 이고 7의 평가에서도 문제가 없다면, 4의 retrieved chunk 를 가지고 답변 작성
@@ -124,5 +126,31 @@ assert all(result["relevance"] == "no" for result in invalid_query_results)
 #   없으면 {‘hallucination’: ‘no’}
 # 라고 출력하도록 함
 # - llama3 prompt format 준수
+class HallucinationResults(BaseModel):
+    query: str = Field(
+        description="Given query.")
+    docs: str = Field(
+        description="Given document.")
+    relevance: str = Field(
+        description="Whether the retrieved document is relevant to the query. If relevant, set to 'yes'; otherwise, set to 'no'.")
+    hallucination: str = Field(
+        description="Given query, retrived document and the relevance, check. If it has hallucination, set to 'yes'; otherwise, set to 'no'.")
+
+# Set up a parser + inject instructions into the prompt template.
+parser = JsonOutputParser(pydantic_object=HallucinationResults)
+
+hallucination_check_prompt = PromptTemplate(
+    template="You are an assistant that provides answers in JSON format.\n{format_instructions}\n\nQuery: \"{query}\"\nRetrieved document: \"{docs}\"\n\nJSON Response:",
+    input_variables=["query", 'docs'],
+    partial_variables={"format_instructions": parser.get_format_instructions()},
+)
 
 # 10. 9 에서 ‘yes’ 면 8 로 돌아가서 다시 생성, ‘no’ 면 답변 생성하고 유저에게 답변 생성에 사용된 출처와 함께 출력
+hallucination_check_chain = hallucination_check_prompt | llm | parser
+hallucination_check_results = [hallucination_check_chain.invoke({"query": invalid_query, "docs": result.page_content}) for result in invalid_results_from_vectorstore]
+
+assert all(result["hallucination"] == "no" for result in hallucination_check_results)
+
+for result in hallucination_check_results:
+    print(f'Query: {result["query"]}')
+    print(f'Relevance results: {result["docs"]}')
