@@ -76,7 +76,7 @@ vectorstore.add_texts(texts_content)
 # 4. User query = ‘agent memory’ 를 받아 관련된 chunks를 retrieve
 # https://api.python.langchain.com/en/latest/vectorstores/langchain_core.vectorstores.VectorStore.html#langchain_core.vectorstores.VectorStore.as_retriever
 query = "agent memory"
-results = vectorstore.similarity_search(query, 5)
+results_from_vectorstore = vectorstore.similarity_search(query, 5)
 
 # 5. User query와 retrieved chunk 에 대해 relevance 가 있는지를 평가하는 시스템 프롬프트 작성:
 # retrieval 퀄리티를 LLM 이 스스로 평가하도록 하고,
@@ -95,8 +95,8 @@ class RelevanceResults(BaseModel):
 parser = JsonOutputParser(pydantic_object=RelevanceResults)
 
 prompt = PromptTemplate(
-    template="You are an assistant that provides answers in JSON format.\n{format_instructions}\nQuery: {query}\n\nJSON Response:",
-    input_variables=["query"],
+    template="You are an assistant that provides answers in JSON format.\n{format_instructions}\n\nQuery: \"{query}\"\n```\n\nRetrieved document: \"{docs}\"\n\nJSON Response:",
+    input_variables=["query", 'docs'],
     partial_variables={"format_instructions": parser.get_format_instructions()},
 )
 
@@ -104,15 +104,16 @@ chain = prompt | llm | parser
 
 # 6. 5 에서 모든 docs에 대해 ‘no’ 라면 디버깅
 # (Splitter, Chunk size, overlap, embedding model, vector store, retrieval 평가 시스템 프롬프트 등)
-query_results = [chain.invoke({"query": result.page_content}) for result in results]
+query_results = [chain.invoke({"query": query, "docs": result.page_content}) for result in results_from_vectorstore]
 assert all(result["relevance"] == "yes" for result in query_results)
 
 # 7. 5에서 ‘yes’ 라면 질문과 명확히 관련 없는 docs 나 질문 (예: ‘I like an apple’)에 대해서는 ‘no’ 라고 나오는지 테스트 프롬프트 및 평가 코드 작성.
 # 이 때는 관련 없다는 답변 작성
 # - llama3 prompt format 준수
-invalid_results = vectorstore.similarity_search("I like an apple", 5)
-print(invalid_results)
-assert all(result["relevance"] == "no" for result in invalid_results)
+invalid_query = "I like an apple"
+invalid_results_from_vectorstore = vectorstore.similarity_search(invalid_query, 5)
+invalid_query_results = [chain.invoke({"query": invalid_query, "docs": result.page_content}) for result in invalid_results_from_vectorstore]
+assert all(result["relevance"] == "no" for result in invalid_query_results)
 
 # 8. ‘yes’ 이고 7의 평가에서도 문제가 없다면, 4의 retrieved chunk 를 가지고 답변 작성
 # prompt | llm | parser 형태로 작성
