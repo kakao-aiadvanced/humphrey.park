@@ -14,7 +14,7 @@ prompt = PromptTemplate(
     input_variables=["question", "document"],
 )
 
-llm = ChatOllama(model="qwen2", output="json", temperature=0)
+llm = ChatOllama(model="llama3", output="json", temperature=0)
 
 # Chain
 rag_chain = prompt | llm | StrOutputParser()

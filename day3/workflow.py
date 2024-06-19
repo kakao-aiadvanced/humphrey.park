@@ -36,6 +36,8 @@ class GraphState(TypedDict):
     generation: str
     web_search: str
     documents: List[str]
+    origin: str
+
 
 
 ### Nodes
@@ -119,7 +121,7 @@ def grade_documents(state):
 
 def web_search(state):
     """
-    Web search based based on the question
+    Web search based on the question
 
     Args:
         state (dict): The current graph state
@@ -194,11 +196,11 @@ def grade_generation_v_documents_and_question(state):
     documents = state["documents"]
     generation = state["generation"]
 
-    hallucination = hallucination_grader.invoke(
+    score = hallucination_grader.invoke(
         {"documents": documents, "generation": generation}
     )
-    print(hallucination)
-    grade = hallucination["hallucination"]
+    print(score)
+    grade = score["hallucination"]
 
     # Check hallucination
     if grade == "no":
@@ -252,11 +254,13 @@ workflow.add_conditional_edges(
 if __name__ == "__main__":
     app = workflow.compile()
 
-    question = "Where does Messi play right now?"
+    question = "I like apples. What is the best way to grow them?"
     state = {"question": question}
 
     try:
         for output in app.stream(state, {"recursion_limit": 10}):
-            pprint(output)
+            for key, value in output.items():
+                pprint(f"Finished running: {key}:")
+        print(value["generation"])
     except:
         print("No answer generated")

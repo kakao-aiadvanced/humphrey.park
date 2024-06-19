@@ -5,7 +5,7 @@ from langchain_core.output_parsers import JsonOutputParser
 from langchain_core.prompts import PromptTemplate
 
 # LLM
-llm = ChatOllama(model="qwen2", format="json", temperature=0)
+llm = ChatOllama(model="llama3", format="json", temperature=0)
 
 prompt = PromptTemplate(
     template="""<|begin_of_text|><|start_header_id|>system<|end_header_id|> You are an expert at routing a

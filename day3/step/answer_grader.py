@@ -7,7 +7,7 @@ from langchain_core.prompts import PromptTemplate
 ### Answer Grader
 
 # LLM
-llm = ChatOllama(model="qwen2", format="json", temperature=0)
+llm = ChatOllama(model="llama3", format="json", temperature=0)
 
 # Prompt
 prompt = PromptTemplate(

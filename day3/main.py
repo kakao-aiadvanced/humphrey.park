@@ -30,7 +30,7 @@ def main() -> None:
         value="Where does Messi play right now?",
     )
     # Button to generate report
-    generate_report = st.button("Generate Report")
+    generate_report = st.button("Query")
     if generate_report:
         st.session_state["topic"] = input_topic
 
