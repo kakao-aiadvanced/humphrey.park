@@ -7,9 +7,9 @@ llm = ChatOllama(model="qwen2", format="json", temperature=0)
 # Prompt
 prompt = PromptTemplate(
     template=""" <|begin_of_text|><|start_header_id|>system<|end_header_id|> You are a grader assessing whether
-    an answer is grounded in / supported by a set of facts. Give a binary 'yes' or 'no' score to indicate
-    whether the answer is grounded in / supported by a set of facts. Provide the binary score as a JSON with a
-    single key 'score' and no preamble or explanation. <|eot_id|><|start_header_id|>user<|end_header_id|>
+    an answer is not grounded in / supported by a set of facts. Give a binary 'yes' or 'no' score to indicate
+    whether the answer is not grounded in / supported by a set of facts. Provide the binary score as a JSON with a
+    single key 'hallucination' and no preamble or explanation. <|eot_id|><|start_header_id|>user<|end_header_id|>
     Here are the facts:
     \n ------- \n
     {documents}

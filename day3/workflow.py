@@ -7,15 +7,13 @@ from typing_extensions import TypedDict
 
 from step.answer_grader import answer_grader
 from step.hallucination_grader import hallucination_grader
-from step.retrieval_grader import retrieval_grader
+from step.relevance_checker import relevance_checker
 from step.generate import rag_chain
 from step.index import retriever
 
 from tavily import TavilyClient
 from dotenv import load_dotenv
 import os
-
-from step.router import question_router
 
 # load .env
 load_dotenv()
@@ -57,6 +55,8 @@ def retrieve(state):
 
     # Retrieval
     documents = retriever.invoke(question)
+    print("---RETRIEVE RESULTS ---")
+    print(documents)
     return {"documents": documents, "question": question}
 
 
@@ -99,10 +99,10 @@ def grade_documents(state):
     filtered_docs = []
     web_search = "No"
     for d in documents:
-        score = retrieval_grader.invoke(
+        score = relevance_checker.invoke(
             {"question": question, "document": d.page_content}
         )
-        grade = score["score"]
+        grade = score["relevance"]
         # Document relevant
         if grade.lower() == "yes":
             print("---GRADE: DOCUMENT RELEVANT---")
@@ -145,32 +145,6 @@ def web_search(state):
 
 
 ### Edges
-
-
-def route_question(state):
-    """
-    Route question to web search or RAG.
-
-    Args:
-        state (dict): The current graph state
-
-    Returns:
-        str: Next node to call
-    """
-
-    print("---ROUTE QUESTION---")
-    question = state["question"]
-    print(question)
-    source = question_router.invoke({"question": question})
-    print(source)
-    print(source["datasource"])
-    if source["datasource"] == "web_search":
-        print("---ROUTE QUESTION TO WEB SEARCH---")
-        return "websearch"
-    elif source["datasource"] == "vectorstore":
-        print("---ROUTE QUESTION TO RAG---")
-        return "vectorstore"
-
 
 def decide_to_generate(state):
     """
@@ -220,13 +194,14 @@ def grade_generation_v_documents_and_question(state):
     documents = state["documents"]
     generation = state["generation"]
 
-    score = hallucination_grader.invoke(
+    hallucination = hallucination_grader.invoke(
         {"documents": documents, "generation": generation}
     )
-    grade = score["score"]
+    print(hallucination)
+    grade = hallucination["hallucination"]
 
     # Check hallucination
-    if grade == "yes":
+    if grade == "no":
         print("---DECISION: GENERATION IS GROUNDED IN DOCUMENTS---")
         # Check question-answering
         print("---GRADE GENERATION vs QUESTION---")
@@ -246,23 +221,15 @@ def grade_generation_v_documents_and_question(state):
 workflow = StateGraph(GraphState)
 
 # Define the nodes
-workflow.add_node("websearch", web_search)  # web search
 workflow.add_node("retrieve", retrieve)  # retrieve
+workflow.add_node("websearch", web_search)  # web search
 workflow.add_node("grade_documents", grade_documents)  # grade documents
 workflow.add_node("generate", generate)  # generate
-# %% md
-### Graph Build
-# %%
-# Build graph
-workflow.set_conditional_entry_point(
-    route_question,
-    {
-        "websearch": "websearch",
-        "vectorstore": "retrieve",
-    },
-)
+
+workflow.set_entry_point('retrieve')
 
 workflow.add_edge("retrieve", "grade_documents")
+
 workflow.add_conditional_edges(
     "grade_documents",
     decide_to_generate,
@@ -281,3 +248,15 @@ workflow.add_conditional_edges(
         "not useful": "websearch",
     },
 )
+
+if __name__ == "__main__":
+    app = workflow.compile()
+
+    question = "Where does Messi play right now?"
+    state = {"question": question}
+
+    try:
+        for output in app.stream(state, {"recursion_limit": 10}):
+            pprint(output)
+    except:
+        print("No answer generated")
