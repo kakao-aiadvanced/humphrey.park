@@ -1,9 +1,6 @@
 import bs4
-import faiss
 from dotenv import load_dotenv
-from langchain.schema.document import Document
 from langchain_community.chat_models import ChatOllama
-from langchain_community.docstore.in_memory import InMemoryDocstore
 from langchain_community.document_loaders import WebBaseLoader
 from langchain_community.vectorstores import FAISS
 from langchain_core.output_parsers import JsonOutputParser
