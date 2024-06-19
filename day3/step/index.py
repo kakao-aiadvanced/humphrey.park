@@ -14,26 +14,24 @@ urls = [
     "https://lilianweng.github.io/posts/2023-10-25-adv-attack-llm/",
 ]
 
-loader = WebBaseLoader(
-    web_paths=urls,
-    bs_kwargs=dict(
-        parse_only=bs4.SoupStrainer(
-            class_=("post-content")
-        )
-    ),
-)
-docs = loader.load()
-combined_docs = "\n".join(doc.page_content for doc in docs)
+# loader = WebBaseLoader(
+#     web_paths=urls,
+#     bs_kwargs=dict(
+#         parse_only=bs4.SoupStrainer(
+#             class_=("post-content")
+#         )
+#     ),
+# )
+# docs = loader.load()
 
-text_splitter = RecursiveCharacterTextSplitter(
-    chunk_size=500,
-    chunk_overlap=100,
-    length_function=len,
-    is_separator_regex=False,
-)
+docs = [WebBaseLoader(url).load() for url in urls]
+docs_list = [item for sublist in docs for item in sublist]
 
-texts = text_splitter.create_documents([combined_docs])
+text_splitter = RecursiveCharacterTextSplitter.from_tiktoken_encoder(
+    chunk_size=250, chunk_overlap=0
+)
+doc_splits = text_splitter.split_documents(docs_list)
 
 embeddings = OpenAIEmbeddings(model="text-embedding-3-large")
-vectorstore = FAISS.from_documents(documents=texts, embedding=embeddings)
+vectorstore = FAISS.from_documents(documents=doc_splits, embedding=embeddings)
 retriever = vectorstore.as_retriever()
