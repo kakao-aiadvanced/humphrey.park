@@ -54,28 +54,16 @@ embeddings = OpenAIEmbeddings(model="text-embedding-3-large")
 # texts 객체의 형식을 확인하고, 필요한 경우 변환
 texts_content = [text.page_content for text in texts]
 
-# embedding: https://python.langchain.com/v0.2/docs/integrations/text_embedding/openai/
-doc_embeddings = embeddings.embed_documents(texts_content)
+# FAISS 를 사용하여 Vector store 저장
+vectorstore = FAISS.from_texts(texts=texts_content, embedding=embeddings)
 
-# FAISS 인덱스 생성
-dimension = len(doc_embeddings[0])  # 임베딩 벡터의 차원
-index = faiss.IndexFlatL2(dimension)  # L2 거리 기반의 FAISS 인덱스 생성
-
-# 문서 저장소 생성 및 벡터 저장소 초기화
-documents = [Document(page_content=text) for text in texts_content]
-docstore = InMemoryDocstore(dict(enumerate(documents)))
-index_to_docstore_id = {i: i for i in range(len(documents))}
-
-vectorstore = FAISS(index=index, docstore=docstore, index_to_docstore_id=index_to_docstore_id,
-                    embedding_function=embeddings)
-
-# 임베딩을 FAISS 인덱스에 추가
-vectorstore.add_texts(texts_content)
+# Vector store 를 retriever 로 변환
+retriever = vectorstore.as_retriever()
 
 # 4. User query = ‘agent memory’ 를 받아 관련된 chunks를 retrieve
 # https://api.python.langchain.com/en/latest/vectorstores/langchain_core.vectorstores.VectorStore.html#langchain_core.vectorstores.VectorStore.as_retriever
 query = "agent memory"
-results_from_vectorstore = vectorstore.similarity_search(query, 5)
+results_from_vectorstore = retriever.invoke(query)
 
 # 5. User query와 retrieved chunk 에 대해 relevance 가 있는지를 평가하는 시스템 프롬프트 작성:
 # retrieval 퀄리티를 LLM 이 스스로 평가하도록 하고,
@@ -88,7 +76,8 @@ llm = ChatOllama(model="llama3:8b", temperature=0)
 
 class RelevanceResults(BaseModel):
     relevance: str = Field(
-        description="Whether the document is relevant to the sentence. If relevant, set to 'yes'; otherwise, set to 'no'.")
+        description="Whether the document is relevant to the sentence. "
+                    "If relevant, set to 'yes'; otherwise, set to 'no'.")
 
 
 relevance_result_parser = JsonOutputParser(pydantic_object=RelevanceResults)
@@ -130,7 +119,7 @@ assert all(result["relevance"] == "yes" for result in query_results)
 # 이 때는 관련 없다는 답변 작성
 # - llama3 prompt format 준수
 invalid_query = "I like an apple."
-invalid_results_from_vectorstore = vectorstore.similarity_search(invalid_query, 5)
+invalid_results_from_vectorstore = retriever.invoke(invalid_query)
 
 # for result in invalid_results_from_vectorstore:
 #     print(result.page_content + '\n------\n')
@@ -152,7 +141,8 @@ assert all(result["relevance"] == "no" for result in invalid_query_results)
 # - llama3 prompt format 준수
 class HallucinationResults(BaseModel):
     hallucination: str = Field(
-        description="Whether the document is relevant to the sentence. If relevant, set to 'yes'; otherwise, set to 'no'.")
+        description="Whether the document is relevant to the sentence. "
+                    "If relevant, set to 'yes'; otherwise, set to 'no'.")
 
 
 hallucination_json_parser = JsonOutputParser(pydantic_object=HallucinationResults)
