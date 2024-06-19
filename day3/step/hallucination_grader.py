@@ -2,7 +2,7 @@ from langchain_community.chat_models import ChatOllama
 from langchain_core.output_parsers import JsonOutputParser
 from langchain_core.prompts import PromptTemplate
 
-llm = ChatOllama(model="llama3", format="json", temperature=0)
+llm = ChatOllama(model="qwen2", format="json", temperature=0)
 
 # Prompt
 prompt = PromptTemplate(

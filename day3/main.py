@@ -48,7 +48,14 @@ def main() -> None:
             value["generation"] = "No answer generated"
 
         with st.spinner("Generating Report"):
+            source = None
             final_report = value["generation"]
             st.markdown(final_report)
+
+            documents = value["documents"]
+            if documents is not None:
+                source = "\n".join([f'- {doc.metadata["source"]}' for doc in documents])
+                st.markdown(source)
+
 
 main()
